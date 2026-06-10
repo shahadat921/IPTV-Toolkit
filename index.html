@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M3U Manager V1</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+body{font-family:Arial;background:#121212;color:#fff;padding:15px}input,button{padding:10px;margin:4px}
+.card{background:#1e1e1e;border-radius:10px;padding:10px;margin:10px 0}.channel{display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px solid #333}
+img{width:36px;height:36px;object-fit:contain}video{width:100%}
+</style></head><body>
+<h2>M3U Playlist Manager</h2>
+<input id="url" placeholder="Paste M3U URL" style="width:70%"><button onclick="loadUrl()">Load</button>
+<input type="file" id="file">
+<input id="search" placeholder="Search channel" oninput="render()">
+<button onclick="copyAll()">Copy All</button>
+<button onclick="exportM3U()">Export M3U</button>
+<div id="stats"></div><div id="out"></div>
+<video id="player" controls></video>
+<script>
+let data=[];
+document.getElementById('file').onchange=async e=>parse(await e.target.files[0].text());
+async function loadUrl(){
+ let u=document.getElementById('url').value;
+ let r=await fetch('/api/fetch?url='+encodeURIComponent(u));
+ let t=await r.text(); parse(t);
+}
+function parse(t){
+ data=[]; let l=t.split(/\r?\n/);
+ for(let i=0;i<l.length;i++) if(l[i].startsWith('#EXTINF')){
+ let e=l[i],s=(l[i+1]||'').trim();
+ data.push({
+ name:(e.split(',').pop()||'Unknown').trim(),
+ group:(e.match(/group-title="([^"]*)"/)||[])[1]||'Other',
+ logo:(e.match(/tvg-logo="([^"]*)"/)||[])[1]||'',
+ url:s,enabled:true});
+ }
+ render();
+}
+function render(){
+ let q=document.getElementById('search').value.toLowerCase();
+ let g={}; data.filter(x=>x.name.toLowerCase().includes(q)).forEach(c=>(g[c.group]??=[]).push(c));
+ document.getElementById('stats').innerHTML='Channels: '+data.length+' | Categories: '+Object.keys(g).length;
+ let o=document.getElementById('out'); o.innerHTML='';
+ Object.entries(g).forEach(([k,v])=>{
+ let d=document.createElement('div'); d.className='card';
+ d.innerHTML='<h3>'+k+' ('+v.length+')</h3><button onclick="copyCat(`'+k+'`)">Copy Category</button>';
+ v.forEach(c=>{
+ let r=document.createElement('div'); r.className='channel';
+ r.innerHTML='<input type=checkbox '+(c.enabled?'checked':'')+'><img src="'+c.logo+'"><span style="flex:1">'+c.name+'</span><button>Check</button>';
+ r.querySelector('input').onchange=e=>c.enabled=e.target.checked;
+ r.querySelector('button').onclick=()=>play(c.url);
+ d.appendChild(r);
+ });
+ o.appendChild(d);
+ });
+}
+function play(u){let v=document.getElementById('player'); if(Hls.isSupported()){let h=new Hls();h.loadSource(u);h.attachMedia(v);}else v.src=u;}
+function build(arr){let o='#EXTM3U\n';arr.filter(x=>x.enabled).forEach(c=>o+=`#EXTINF:-1 tvg-logo="${c.logo}" group-title="${c.group}",${c.name}\n${c.url}\n`);return o;}
+function copyAll(){navigator.clipboard.writeText(build(data));alert('Copied');}
+function copyCat(g){navigator.clipboard.writeText(build(data.filter(x=>x.group===g)));alert('Copied');}
+function exportM3U(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([build(data)]));a.download='playlist.m3u';a.click();}
+</script></body></html>
