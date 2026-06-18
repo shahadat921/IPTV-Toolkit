@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tuner — Live Playlist Player</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2048%2048'%3E%3Crect%20width='48'%20height='48'%20rx='13'%20fill='%23047857'/%3E%3Cpath%20d='M19%2015%20L19%2033%20L34%2024%20Z'%20fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F3FBF6;
+    --surface:#FFFFFF;
+    --surface-tint:#EAF7EE;
+    --line:#D7EDDD;
+    --text:#0F2A1C;
+    --muted:#5E7C6B;
+    --green:#16A34A;
+    --green-dark:#0B6B33;
+    --green-light:#DCFCE7;
+    --green-mid:#22C55E;
+    --header-bg:#059669;
+    --header-bg-deep:#047857;
+    --header-text:#FFFFFF;
+    --header-text-muted:rgba(255,255,255,0.78);
+    --header-error:#FFD2D2;
+    --error:#B91C1C;
+    --mono:'JetBrains Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+    --body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--body);
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+    min-height:100dvh;
+    overflow-x:hidden;
+  }
+  a{color:var(--green-dark);}
+  button, .channel-card{
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  main{flex:1;}
+
+  /* ---- Header ---- */
+  header.topbar{
+    position:relative;
+    background:var(--header-bg);
+    overflow:hidden;
+  }
+  header.topbar::after{
+    content:"";
+    position:absolute; left:0; right:0; top:0; height:2px;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.9) 50%, transparent);
+    background-size:200% 100%;
+    animation:scan 5s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce){ header.topbar::after{animation:none;} }
+  @keyframes scan{ from{background-position:0% 0;} to{background-position:-200% 0;} }
+
+  .topbar-inner{
+    max-width:960px;
+    margin:0 auto;
+    padding:18px 20px 16px;
+    padding-left:max(20px, env(safe-area-inset-left));
+    padding-right:max(20px, env(safe-area-inset-right));
+    padding-top:max(18px, env(safe-area-inset-top));
+  }
+
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .brand-badge{
+    background:#FFFFFF;
+    border-radius:12px;
+    padding:5px;
+    display:flex;
+    box-shadow:0 4px 10px -4px rgba(0,0,0,0.3);
+    flex-shrink:0;
+  }
+  .brand svg{flex-shrink:0;}
+  .brand-text{display:flex; flex-direction:column;}
+  .brand-name{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:22px;
+    color:var(--header-text);
+    line-height:1.1;
+  }
+  .brand-tag{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--header-text-muted);
+    margin-top:2px;
+  }
+
+  form#loadForm{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  input[type="text"], textarea{
+    background:#FFFFFF;
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:8px;
+    padding:11px 13px;
+    font-family:var(--mono);
+    font-size:13px;
+  }
+  input::placeholder, textarea::placeholder{color:var(--muted);}
+  input[type="text"]:focus, textarea:focus, button:focus-visible{
+    outline:2px solid var(--green-mid);
+    outline-offset:1px;
+  }
+  #m3uUrl{flex:1; min-width:200px;}
+  button{
+    font-family:var(--body);
+    font-weight:600;
+    font-size:13px;
+    border:none;
+    border-radius:8px;
+    padding:11px 18px;
+    cursor:pointer;
+  }
+  button.primary{background:var(--green); color:#fff;}
+  button.primary:hover{background:var(--green-dark);}
+  button.ghost-sm{
+    background:#fff;
+    border:1px solid var(--line);
+    color:var(--green-dark);
+  }
+  button.ghost-sm:hover{background:var(--green-light); border-color:var(--green);}
+
+  .link-btn{
+    background:none;
+    border:none;
+    color:var(--header-text);
+    opacity:0.9;
+    font-size:12.5px;
+    font-weight:500;
+    text-decoration:underline;
+    text-underline-offset:2px;
+    padding:8px 0 0;
+    cursor:pointer;
+    display:inline-block;
+  }
+  .link-btn:hover{opacity:1;}
+
+  textarea#rawM3u{
+    width:100%;
+    margin-top:10px;
+    min-height:90px;
+    resize:vertical;
+    display:none;
+  }
+
+  .status{
+    font-family:var(--mono);
+    font-size:12px;
+    margin-top:10px;
+    color:var(--header-text-muted);
+  }
+  .status.error{color:var(--header-error);}
+  .status.ok{color:#fff; font-weight:600;}
+  .link-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .link-sep{color:var(--header-text-muted); font-size:12px;}
+
+  /* ---- Welcome modal ---- */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(8,28,18,0.55);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    z-index:100;
+    opacity:0;
+    visibility:hidden;
+    transition:opacity .2s;
+  }
+  .modal-overlay.show{opacity:1; visibility:visible;}
+  .modal-card{
+    position:relative;
+    background:#FFFFFF;
+    border-radius:18px;
+    max-width:380px;
+    width:100%;
+    padding:30px 24px 24px;
+    text-align:center;
+    box-shadow:0 30px 60px -20px rgba(8,28,18,0.45);
+  }
+  .modal-close{
+    position:absolute;
+    top:10px; right:10px;
+    width:32px; height:32px;
+    border-radius:8px;
+    background:var(--surface-tint);
+    border:none;
+    color:var(--muted);
+    font-size:20px;
+    line-height:1;
+    padding:0;
+  }
+  .modal-close:hover{background:var(--green-light); color:var(--green-dark);}
+  .modal-badge{display:flex; justify-content:center; margin-bottom:14px;}
+  #welcomeTitle{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:19px;
+    color:var(--text);
+    margin:4px 0 10px;
+  }
+  .modal-card p{
+    font-size:13.5px;
+    color:var(--muted);
+    line-height:1.55;
+    margin:0 0 22px;
+  }
+  .modal-actions{display:flex; flex-direction:column; gap:10px;}
+  .modal-actions button{width:100%;}
+  .modal-skip{
+    background:none; border:none;
+    color:var(--muted);
+    font-size:12.5px;
+    text-decoration:underline;
+    text-underline-offset:2px;
+    margin-top:14px;
+    cursor:pointer;
+  }
+  .modal-skip:hover{color:var(--text);}
+
+  /* ---- Player ---- */
+  .player-wrap{
+    max-width:960px;
+    margin:0 auto;
+    padding:14px 20px 8px;
+    width:100%;
+    position:sticky;
+    top:0;
+    z-index:5;
+    background:var(--bg);
+    box-shadow:0 8px 16px -12px rgba(15,42,28,0.18);
+  }
+  .crt{
+    position:relative;
+    aspect-ratio:16/9;
+    background:#000;
+    border-radius:14px;
+    border:1px solid var(--line);
+    box-shadow:0 18px 40px -24px rgba(15,42,28,0.35);
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  video{width:100%; height:100%; object-fit:contain; background:#000;}
+  .no-signal{
+    position:absolute;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:0.15em;
+    color:#8FBFA0;
+  }
+  .now-playing{
+    margin-top:12px;
+    font-family:var(--body);
+    font-size:13px;
+    color:var(--muted);
+    min-height:20px;
+  }
+  .now-playing strong{color:var(--text); font-size:14px; font-weight:600;}
+  .live-pill{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--green-dark);
+    background:var(--green-light);
+    padding:2px 9px;
+    border-radius:999px;
+    margin-right:8px;
+  }
+
+  /* ---- Feed ---- */
+  .feed-wrap{
+    max-width:960px;
+    margin:0 auto;
+    padding:6px 20px 32px;
+    width:100%;
+  }
+  .search-input{
+    width:100%;
+    margin-bottom:14px;
+    display:none;
+  }
+  .channel-feed{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(260px,1fr));
+    gap:10px;
+  }
+  .feed-empty{
+    grid-column:1/-1;
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.6;
+    padding:48px 20px;
+    border:1px dashed var(--line);
+    border-radius:12px;
+    background:var(--surface);
+  }
+  .group-label{
+    grid-column:1/-1;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.07em;
+    text-transform:uppercase;
+    color:var(--muted);
+    padding:14px 2px 2px;
+  }
+
+  .channel-card{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-left:3px solid transparent;
+    border-radius:10px;
+    padding:5px;
+    transition:border-color .15s, background .15s;
+  }
+  .channel-card:hover{border-color:var(--green-mid);}
+  .channel-card.active{background:var(--green-light); border-left-color:var(--green);}
+
+  .card-main{
+    flex:1;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:none;
+    border:none;
+    padding:9px 6px;
+    text-align:left;
+    min-width:0;
+    cursor:pointer;
+  }
+  .ch-num{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--green-dark);
+    width:24px;
+    flex-shrink:0;
+  }
+  .ch-logo{
+    width:32px; height:32px;
+    border-radius:7px;
+    object-fit:cover;
+    background:var(--surface-tint);
+    flex-shrink:0;
+  }
+  .ch-logo.placeholder{display:inline-block;}
+  .card-text{display:flex; flex-direction:column; min-width:0;}
+  .ch-name{
+    font-size:14px;
+    font-weight:600;
+    color:var(--text);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .ch-group{font-size:11px; color:var(--muted);}
+
+  .copy-btn{
+    flex-shrink:0;
+    width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--surface-tint);
+    color:var(--green-dark);
+    cursor:pointer;
+    margin-right:4px;
+  }
+  .copy-btn:hover{background:var(--green-light); border-color:var(--green);}
+  .copy-btn:active{transform:scale(0.93);}
+  .copy-btn.copied{background:var(--green); border-color:var(--green); color:#fff;}
+
+  /* ---- Toast ---- */
+  .toast{
+    position:fixed;
+    bottom:max(18px, env(safe-area-inset-bottom));
+    left:50%;
+    transform:translate(-50%, 8px);
+    background:var(--green-dark);
+    color:#fff;
+    padding:9px 18px;
+    border-radius:20px;
+    font-size:13px;
+    font-family:var(--body);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s, transform .2s;
+    z-index:50;
+    box-shadow:0 10px 24px -10px rgba(15,42,28,0.4);
+  }
+  .toast.show{opacity:1; transform:translate(-50%,0);}
+
+  /* ---- Footer ---- */
+  footer.site-footer{
+    background:var(--header-bg);
+    color:#EAFBF0;
+    padding:18px 20px;
+    padding-bottom:max(18px, env(safe-area-inset-bottom));
+  }
+  .footer-inner{
+    max-width:960px;
+    margin:0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .footer-brand{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--display);
+    font-weight:700;
+    font-size:13px;
+  }
+  .footer-note{font-size:12px; color:#BFE8CE;}
+
+  /* ---- Mobile ---- */
+  @media (max-width:760px){
+    .crt{aspect-ratio:16/9;}
+    #m3uUrl, textarea#rawM3u, #searchInput{font-size:16px;}
+    button{padding:12px 16px; font-size:14px;}
+    form#loadForm{flex-direction:column;}
+    #m3uUrl{min-width:0;}
+    form#loadForm button.primary{width:100%;}
+    .channel-card{padding:4px;}
+    .card-main{padding:10px 6px;}
+    .ch-name{font-size:14px;}
+    .footer-inner{flex-direction:column; align-items:flex-start; text-align:left;}
+  }
+</style>
+</head>
+<body>
+
+<div id="welcomeModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+  <div class="modal-card">
+    <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+    <div class="modal-badge">
+      <svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true">
+        <defs>
+          <linearGradient id="modalLogoGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#10B981"/>
+            <stop offset="100%" stop-color="#047857"/>
+          </linearGradient>
+        </defs>
+        <rect width="48" height="48" rx="13" fill="url(#modalLogoGrad)"/>
+        <path d="M19 15 L19 33 L34 24 Z" fill="#FFFFFF"/>
+      </svg>
+    </div>
+    <h2 id="welcomeTitle">Welcome to Tuner</h2>
+    <p>Bring your own playlist to get started — paste an m3u / m3u8 link, or upload a playlist file directly from your device.</p>
+    <div class="modal-actions">
+      <button type="button" class="primary" id="modalPasteBtn">Paste Playlist URL</button>
+      <button type="button" class="ghost-sm" id="modalUploadBtn">Upload M3U / M3U8 File</button>
+    </div>
+    <button type="button" class="modal-skip" id="modalSkip">Maybe later</button>
+  </div>
+</div>
+<input type="file" id="fileInput" accept=".m3u,.m3u8,.txt" style="display:none;">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-badge">
+        <svg width="34" height="34" viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#10B981"/>
+              <stop offset="100%" stop-color="#047857"/>
+            </linearGradient>
+            <radialGradient id="logoSheen" cx="28%" cy="22%" r="75%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+              <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="48" height="48" rx="13" fill="url(#logoGrad)"/>
+          <rect width="48" height="48" rx="13" fill="url(#logoSheen)"/>
+          <path d="M19 15 L19 33 L34 24 Z" fill="#FFFFFF"/>
+          <path d="M36.5 14c3.2 3.1 4.8 6.8 4.8 10s-1.6 6.9-4.8 10" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.85"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">Tuner</span>
+        <span class="brand-tag">Live Playlist Player</span>
+      </div>
+    </div>
+
+    <form id="loadForm">
+      <input type="text" id="m3uUrl" placeholder="Paste an m3u / m3u8 playlist URL…" autocomplete="off">
+      <button type="submit" class="primary">Load</button>
+    </form>
+    <div class="link-row">
+      <button type="button" class="link-btn" id="pasteToggle">Paste raw playlist instead</button>
+      <span class="link-sep">·</span>
+      <button type="button" class="link-btn" id="headerUploadBtn">Upload file</button>
+    </div>
+    <textarea id="rawM3u" placeholder="#EXTM3U
+#EXTINF:-1,Channel name
+https://example.com/stream.m3u8"></textarea>
+    <button type="button" class="ghost-sm" id="parseRawBtn" style="display:none; margin-top:8px;">Parse pasted playlist</button>
+    <div class="status" id="statusMsg"></div>
+  </div>
+</header>
+
+<main>
+  <section class="player-wrap">
+    <div class="crt">
+      <video id="player" controls playsinline></video>
+      <div class="no-signal" id="noSignal">NO SIGNAL</div>
+    </div>
+    <div class="now-playing" id="nowPlaying"></div>
+  </section>
+
+  <section class="feed-wrap">
+    <input type="text" id="searchInput" class="search-input" placeholder="Filter channels…">
+    <div class="channel-feed" id="channelFeed">
+      <div class="feed-empty">No playlist loaded yet. Paste an m3u URL above, or use "Paste raw playlist instead" if the link can't be fetched directly (CORS).</div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true">
+        <rect width="48" height="48" rx="13" fill="#EAFBF0"/>
+        <path d="M19 15 L19 33 L34 24 Z" fill="#047857"/>
+      </svg>
+      Tuner
+    </div>
+    <div class="footer-note">Bring your own playlist · © 2026</div>
+  </div>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script>
+let channels = [];
+let hls = null;
+let activeCard = null;
+let toastTimer = null;
+
+const feedEl = document.getElementById('channelFeed');
+const searchInput = document.getElementById('searchInput');
+const statusMsg = document.getElementById('statusMsg');
+const rawArea = document.getElementById('rawM3u');
+const pasteToggle = document.getElementById('pasteToggle');
+const parseRawBtn = document.getElementById('parseRawBtn');
+const video = document.getElementById('player');
+const noSignal = document.getElementById('noSignal');
+const nowPlaying = document.getElementById('nowPlaying');
+const toastEl = document.getElementById('toast');
+const welcomeModal = document.getElementById('welcomeModal');
+const fileInput = document.getElementById('fileInput');
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function setStatus(msg, type){
+  statusMsg.textContent = msg || '';
+  statusMsg.className = 'status' + (type ? ' ' + type : '');
+}
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+async function copyToClipboard(text){
+  try {
+    if (navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch(e){}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch(e){ return false; }
+}
+
+function parseM3U(text){
+  const lines = text.split(/\r?\n/);
+  const result = [];
+  let current = null;
+  for (let raw of lines){
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#EXTINF')){
+      const nameMatch = line.match(/,(.*)$/);
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      const groupMatch = line.match(/group-title="([^"]*)"/i);
+      current = {
+        name: nameMatch ? nameMatch[1].trim() : 'Unnamed channel',
+        logo: logoMatch ? logoMatch[1] : '',
+        group: groupMatch ? groupMatch[1] : 'Uncategorized'
+      };
+    } else if (!line.startsWith('#')){
+      if (current){
+        current.url = line;
+        result.push(current);
+        current = null;
+      } else {
+        result.push({ name: 'Channel ' + (result.length + 1), url: line, group: 'Uncategorized', logo: '' });
+      }
+    }
+  }
+  return result;
+}
+
+function channelExtinf(c){
+  return `#EXTINF:-1 tvg-logo="${c.logo || ''}" group-title="${c.group || 'Uncategorized'}",${c.name}\n${c.url}`;
+}
+
+function renderChannels(filter){
+  filter = (filter || '').toLowerCase();
+  feedEl.innerHTML = '';
+
+  if (!channels.length){
+    feedEl.innerHTML = '<div class="feed-empty">No playlist loaded yet. Paste an m3u URL above, or use "Paste raw playlist instead" if the link can\'t be fetched directly (CORS).</div>';
+    searchInput.style.display = 'none';
+    return;
+  }
+
+  searchInput.style.display = 'block';
+  const filtered = channels.filter(c => c.name.toLowerCase().includes(filter));
+  if (!filtered.length){
+    feedEl.innerHTML = '<div class="feed-empty">No channels match that search.</div>';
+    return;
+  }
+
+  const order = [];
+  const grouped = {};
+  filtered.forEach(c => {
+    const g = c.group || 'Uncategorized';
+    if (!grouped[g]){ grouped[g] = []; order.push(g); }
+    grouped[g].push(c);
+  });
+
+  let counter = 0;
+  order.forEach(g => {
+    const label = document.createElement('div');
+    label.className = 'group-label';
+    label.textContent = g;
+    feedEl.appendChild(label);
+
+    grouped[g].forEach(c => {
+      counter++;
+      const num = String(counter).padStart(2, '0');
+
+      const card = document.createElement('div');
+      card.className = 'channel-card';
+
+      const main = document.createElement('button');
+      main.className = 'card-main';
+      main.setAttribute('aria-label', 'Play ' + c.name);
+      const logoHtml = c.logo
+        ? `<img class="ch-logo" src="${escapeHtml(c.logo)}" alt="" onerror="this.style.visibility='hidden'">`
+        : `<span class="ch-logo placeholder"></span>`;
+      main.innerHTML = `<span class="ch-num">${num}</span>${logoHtml}<span class="card-text"><span class="ch-name">${escapeHtml(c.name)}</span><span class="ch-group">${escapeHtml(g)}</span></span>`;
+      main.addEventListener('click', () => playChannel(c, card));
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.setAttribute('aria-label', 'Copy link for ' + c.name);
+      copyBtn.title = 'Copy channel link';
+      copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+      copyBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const ok = await copyToClipboard(channelExtinf(c));
+        if (ok){
+          copyBtn.classList.add('copied');
+          copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          showToast('Channel link copied');
+          setTimeout(() => {
+            copyBtn.classList.remove('copied');
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+          }, 1500);
+        } else {
+          showToast('Could not copy — copy manually');
+        }
+      });
+
+      card.appendChild(main);
+      card.appendChild(copyBtn);
+      feedEl.appendChild(card);
+    });
+  });
+}
+
+function playChannel(channel, cardEl){
+  if (activeCard) activeCard.classList.remove('active');
+  if (cardEl){ cardEl.classList.add('active'); activeCard = cardEl; }
+
+  noSignal.style.display = 'none';
+  if (hls){ hls.destroy(); hls = null; }
+
+  const isM3U8 = /\.m3u8(\?.*)?$/i.test(channel.url);
+
+  if (isM3U8 && video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src = channel.url;
+  } else if (isM3U8 && window.Hls && Hls.isSupported()){
+    hls = new Hls();
+    hls.loadSource(channel.url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.ERROR, (evt, data) => {
+      if (data.fatal) setStatus('Playback error: ' + (data.details || 'stream failed to load'), 'error');
+    });
+  } else {
+    video.src = channel.url;
+  }
+
+  video.play().catch(() => {});
+  nowPlaying.innerHTML = `<span class="live-pill">● LIVE</span><strong>${escapeHtml(channel.name)}</strong> &nbsp; ${escapeHtml(channel.group || '')}`;
+}
+
+function handlePlaylistText(text){
+  const parsed = parseM3U(text);
+  if (!parsed.length){
+    setStatus('No channels found — check the playlist format.', 'error');
+    return;
+  }
+  channels = parsed;
+  renderChannels('');
+  setStatus(`Loaded ${channels.length} channel${channels.length === 1 ? '' : 's'}.`, 'ok');
+}
+
+document.getElementById('loadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = document.getElementById('m3uUrl').value.trim();
+  if (!url) return;
+  setStatus('Fetching playlist…');
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    handlePlaylistText(text);
+  } catch (err){
+    setStatus('Could not fetch that URL directly (often a CORS restriction). Use "Paste raw playlist instead" below.', 'error');
+    rawArea.style.display = 'block';
+    parseRawBtn.style.display = 'inline-block';
+  }
+});
+
+pasteToggle.addEventListener('click', () => {
+  const showing = rawArea.style.display === 'block';
+  rawArea.style.display = showing ? 'none' : 'block';
+  parseRawBtn.style.display = showing ? 'none' : 'inline-block';
+});
+
+parseRawBtn.addEventListener('click', () => {
+  const text = rawArea.value.trim();
+  if (!text){ setStatus('Paste playlist text first.', 'error'); return; }
+  handlePlaylistText(text);
+});
+
+searchInput.addEventListener('input', () => renderChannels(searchInput.value));
+
+renderChannels('');
+
+/* ---- Welcome modal (first visit) ---- */
+function openModal(){
+  welcomeModal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(){
+  welcomeModal.classList.remove('show');
+  document.body.style.overflow = '';
+  try { localStorage.setItem('tuner_welcomed', '1'); } catch(e){}
+}
+
+let alreadyWelcomed = false;
+try { alreadyWelcomed = localStorage.getItem('tuner_welcomed') === '1'; } catch(e){}
+if (!alreadyWelcomed){ openModal(); }
+
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalSkip').addEventListener('click', closeModal);
+welcomeModal.addEventListener('click', (e) => { if (e.target === welcomeModal) closeModal(); });
+
+document.getElementById('modalPasteBtn').addEventListener('click', () => {
+  closeModal();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('m3uUrl').focus();
+});
+
+document.getElementById('modalUploadBtn').addEventListener('click', () => fileInput.click());
+document.getElementById('headerUploadBtn').addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    handlePlaylistText(String(reader.result || ''));
+    closeModal();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  reader.onerror = () => setStatus('Could not read that file.', 'error');
+  reader.readAsText(file);
+  fileInput.value = '';
+});
+
+/* ---- Prevent back button from exiting the app ----
+   This is a single-page app with no separate routes, so the browser/WebView
+   back action has nothing to go "back" to and exits entirely. We push an
+   extra history entry on load and on every back press, then treat back as
+   an in-app action (stop playback, return to the home/idle view) instead
+   of letting the app close. */
+try {
+  history.pushState({ tuner: true }, '', location.href);
+} catch(e){}
+
+window.addEventListener('popstate', () => {
+  try { history.pushState({ tuner: true }, '', location.href); } catch(e){}
+
+  if (activeCard || video.src){
+    if (hls){ hls.destroy(); hls = null; }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    noSignal.style.display = 'block';
+    nowPlaying.innerHTML = '';
+    if (activeCard){ activeCard.classList.remove('active'); activeCard = null; }
+  }
+  if (welcomeModal.classList.contains('show')){ closeModal(); }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+</script>
+</body>
+</html>
